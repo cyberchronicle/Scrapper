@@ -1,0 +1,6 @@
+scraping:
+  host: :9003
+
+database:
+  dialect: mongo
+  dsn: mongodb://127.0.0.1:27017

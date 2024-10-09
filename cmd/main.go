@@ -33,8 +33,8 @@ func main() {
 }
 
 type Conf struct {
-	scraping *scraping_server.Conf
-	database *database.Conf
+	Scraping *scraping_server.Conf `yaml:"scraping"`
+	Database *database.Conf        `yaml:"database"`
 }
 
 func Configure() error {
@@ -53,7 +53,7 @@ func Configure() error {
 		scrapingServer = scraping_server.NewServer(signal.Context, "scrapping_server", "scrapper")
 	})
 
-	scrapingServer.Configure(conf.scraping, conf.database)
+	scrapingServer.Configure(conf.Scraping, conf.Database)
 	return nil
 }
 

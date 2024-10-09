@@ -62,18 +62,32 @@ func (s *Service) start() {
 
 	r.Use(middlewares.Logger(s.Name))
 
-	r.Get("some", func(w http.ResponseWriter, r *http.Request) {
-	})
+	r.Get("/api/v1/scrapper/health", checkHealth)
 
-	s.server = &http.Server{
-		Addr:    s.getConf().Host,
-		Handler: r,
-	}
+	for {
 
-	if err := s.server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-		zlog.Error().Msgf("scrapper server http error %v", err)
-	} else {
-		zlog.Error().Msgf("scrapper server http shudown %v", err)
+		conf := s.getConf()
+		zlog.Info().Msgf("scrapper http server starting on %s", conf.Host)
+
+		select {
+		case <-s.ctx.Done():
+			return
+		default:
+		}
+
+		// запускаем http сервер
+		s.server = &http.Server{
+			Addr:    s.getConf().Host,
+			Handler: r,
+		}
+
+		if err := s.server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			zlog.Error().Msgf("scrapper server http error %v", err)
+		} else {
+			zlog.Error().Msgf("scrapper server http shudown %v", err)
+		}
+
+		time.Sleep(time.Second)
 	}
 }
 
@@ -105,4 +119,10 @@ func (s *Service) WaitTerminate() {
 	s.WaitWorker("start")
 
 	zlog.Info().Msg("scrapper server term: begin")
+}
+
+func checkHealth(w http.ResponseWriter, r *http.Request) {
+	// Простая проверка здоровья, отвечаем статусом 200
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
 }
