@@ -3,14 +3,13 @@ package database
 import (
 	"context"
 	"fmt"
+	_ "github.com/jackc/pgx/v4/stdlib"
+	"github.com/jmoiron/sqlx"
 	"scrapping_service/pkg/utils"
 	"sync"
 	"time"
 
-	zlog "github.com/rs/zerolog/log"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"github.com/rs/zerolog/log"
 )
 
 type Conf struct {
@@ -21,7 +20,7 @@ type Conf struct {
 type Database struct {
 	utils.Conv
 
-	DB    *mongo.Client
+	DBX   *sqlx.DB
 	ctx   context.Context
 	xConf sync.RWMutex
 	conf  *Conf
@@ -44,20 +43,26 @@ func NewDatabase(ctx context.Context, name, namespace string) *Database {
 }
 
 func (d *Database) Configure(conf *Conf) {
-	zlog.Info().Msgf("database %s conf: configure begin", d.Name)
+	log.Info().Str("module", d.Name).Msgf("database %s conf: configure begin", d.Name)
 
 	d.setConf(conf)
 
 	d.Load.Do(func() {
-		zlog.Info().Msg("database connecting...")
+		log.Info().Str("module", d.Name).Msg("database connecting...")
 
-		db, err := mongo.Connect(d.ctx, options.Client().ApplyURI(d.getConf().Dsn))
+		db, err := sqlx.Connect(conf.Dialect, conf.Dsn)
 		if err != nil {
-			err = fmt.Errorf("error in mongo.Connect: %v", err)
-			zlog.Panic().Err(err)
+			err = fmt.Errorf("error in sqlx.Connect: %v", err)
+			log.Panic().Err(err)
 			panic(err)
 		}
-		d.DB = db
+		if err = db.Ping(); err != nil {
+			err = fmt.Errorf("error in db.Ping: %v", err)
+			log.Panic().Str("module", d.Name).Msgf("%v", err)
+			panic(err)
+		}
+
+		d.DBX = db
 
 		d.RunWorker(d.ping, "ping", 1)
 	})
@@ -65,11 +70,11 @@ func (d *Database) Configure(conf *Conf) {
 
 func (d *Database) ping() {
 	defer func() {
-		_ = d.DB.Disconnect(d.ctx)
+		_ = d.DBX.Close()
 	}()
 	for {
-		if err := d.DB.Ping(d.ctx, readpref.Primary()); err != nil {
-			zlog.Error().Msgf("database error in ping: %v", err)
+		if err := d.DBX.Ping(); err != nil {
+			log.Error().Str("module", d.Name).Msgf("database error in ping: %v", err)
 		}
 
 		select {
@@ -81,9 +86,9 @@ func (d *Database) ping() {
 }
 
 func (d *Database) WaitTerminate() {
-	zlog.Info().Msg("database term: begin")
+	log.Info().Str("module", d.Name).Msg("database term: begin")
 
-	_ = d.DB.Disconnect(d.ctx)
+	_ = d.DBX.Close()
 
-	zlog.Info().Msg("database term: end")
+	log.Info().Str("module", d.Name).Msg("database term: end")
 }

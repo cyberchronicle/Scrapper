@@ -4,7 +4,7 @@ import (
 	"scrapping_service/pkg/signal"
 	"sync"
 
-	zlog "github.com/rs/zerolog/log"
+	log "github.com/rs/zerolog/log"
 )
 
 // ---------------
@@ -72,5 +72,5 @@ func (c *Conv) WaitWorker(name string) {
 }
 
 func (c *Conv) WaitTerminate() {
-	zlog.Error().Msgf("%s: WaitTerminate not implemented!!!", c.Name)
+	log.Error().Msgf("%s: WaitTerminate not implemented!!!", c.Name)
 }

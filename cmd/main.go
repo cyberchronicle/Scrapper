@@ -2,28 +2,28 @@ package main
 
 import (
 	"scrapping_service/internal/database"
+	"scrapping_service/internal/scrapping"
 
-	zlog "github.com/rs/zerolog/log"
+	log "github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
 
 	"os"
-	"scrapping_service/internal/scraping_server"
 	"scrapping_service/pkg/signal"
 	"sync"
 )
 
 var (
-	configPath     = "config/config.yaml"
-	initMain       sync.Once
-	scrapingServer *scraping_server.Service
+	configPath      = "config/config.yaml"
+	initMain        sync.Once
+	scrapingService *scrapping.Service
 )
 
 func main() {
-	zlog.Info().Msg("service starting...")
+	log.Info().Msg("service starting...")
 
 	err := Configure()
 	if err != nil {
-		zlog.Err(err)
+		log.Err(err)
 		return
 	}
 
@@ -33,8 +33,8 @@ func main() {
 }
 
 type Conf struct {
-	Scraping *scraping_server.Conf `yaml:"scraping"`
-	Database *database.Conf        `yaml:"database"`
+	Scraping *scrapping.Conf `yaml:"scraping"`
+	Database *database.Conf  `yaml:"database"`
 }
 
 func Configure() error {
@@ -50,10 +50,10 @@ func Configure() error {
 	}
 
 	initMain.Do(func() {
-		scrapingServer = scraping_server.NewServer(signal.Context, "scrapping_server", "scrapper")
+		scrapingService = scrapping.NewService(signal.Context, "scrapping_server", "scrapper")
 	})
 
-	scrapingServer.Configure(conf.Scraping, conf.Database)
+	scrapingService.Configure(conf.Scraping, conf.Database)
 	return nil
 }
 
@@ -63,9 +63,9 @@ func WaitTerminate() {
 
 	<-signal.Context.Done()
 
-	zlog.Info().Msg("term: begin")
+	log.Info().Msg("term: begin")
 
-	scrapingServer.WaitTerminate()
+	scrapingService.WaitTerminate()
 
-	zlog.Info().Msg("term: end")
+	log.Info().Msg("term: end")
 }

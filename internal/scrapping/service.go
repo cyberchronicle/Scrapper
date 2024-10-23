@@ -1,18 +1,18 @@
-package scraping_server
+package scrapping
 
 import (
 	"context"
 	"errors"
 	"net/http"
 	"scrapping_service/internal/database"
-	"scrapping_service/internal/scraping_server/repository"
+	"scrapping_service/internal/scrapping/repository"
 	"scrapping_service/pkg/middlewares"
 	"scrapping_service/pkg/utils"
 	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	zlog "github.com/rs/zerolog/log"
+	"github.com/rs/zerolog/log"
 )
 
 type Conf struct {
@@ -33,12 +33,12 @@ type Service struct {
 	// поля для скрапинга
 }
 
-func NewServer(ctx context.Context, name, namespace string) *Service {
+func NewService(ctx context.Context, name, namespace string) *Service {
 	return &Service{ctx: ctx, Conv: utils.NewConv(name, namespace)}
 }
 
 func (s *Service) Configure(conf *Conf, confDb *database.Conf) {
-	zlog.Info().Msg("conf: configure begin")
+	log.Info().Str("module", s.Name).Msg("conf: configure begin")
 
 	s.setConf(conf)
 
@@ -47,16 +47,16 @@ func (s *Service) Configure(conf *Conf, confDb *database.Conf) {
 		db := database.NewDatabase(s.ctx, "database", "scrapping")
 		db.Configure(confDb)
 
-		s.repo = repository.NewRepository(db.DB)
+		s.repo = repository.NewRepository(db.DBX)
 
 		s.RunWorker(s.start, "start", 1)
 	})
 
-	zlog.Info().Msg("conf: configure end")
+	log.Info().Str("module", s.Name).Msg("conf: configure end")
 }
 
 func (s *Service) start() {
-	defer zlog.Info().Msg("start worker closed")
+	defer log.Info().Str("module", s.Name).Msg("start worker closed")
 
 	r := chi.NewRouter()
 
@@ -67,7 +67,7 @@ func (s *Service) start() {
 	for {
 
 		conf := s.getConf()
-		zlog.Info().Msgf("scrapper http server starting on %s", conf.Host)
+		log.Info().Str("module", s.Name).Msgf("scrapper http server starting on %s", conf.Host)
 
 		select {
 		case <-s.ctx.Done():
@@ -82,9 +82,10 @@ func (s *Service) start() {
 		}
 
 		if err := s.server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			zlog.Error().Msgf("scrapper server http error %v", err)
+			log.Error().Str("module", s.Name).Msgf("scrapper server http error %v", err)
 		} else {
-			zlog.Error().Msgf("scrapper server http shudown %v", err)
+			log.Error().Str("module", s.Name).Msgf("scrapper server http shudown %v", err)
+			return
 		}
 
 		time.Sleep(time.Second)
@@ -104,7 +105,7 @@ func (s *Service) getConf() *Conf {
 }
 
 func (s *Service) WaitTerminate() {
-	zlog.Info().Msg("scrapper server term: begin")
+	log.Info().Str("module", s.Name).Msg("scrapper server term: begin")
 
 	ctx, cancel := context.WithTimeout(s.ctx, time.Second*10)
 
@@ -113,12 +114,12 @@ func (s *Service) WaitTerminate() {
 	}()
 
 	if err := s.server.Shutdown(ctx); err != nil {
-		zlog.Err(err)
+		log.Err(err).Str("module", s.Name)
 	}
 
 	s.WaitWorker("start")
 
-	zlog.Info().Msg("scrapper server term: begin")
+	log.Info().Str("module", s.Name).Msg("scrapper server term: begin")
 }
 
 func checkHealth(w http.ResponseWriter, r *http.Request) {

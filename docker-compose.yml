@@ -1,13 +1,18 @@
 version: '3.8'
 
 services:
-  mongodb:
-    image: mongo:latest
-    container_name: mongodb
+  pgdb:
+    container_name: pgdb_scrapping
+    image: postgres:alpine
     ports:
-      - "27017:27017"
+      - 5432:5432
+    environment:
+      POSTGRES_DB: scrapping
+      POSTGRES_USER: articles
+      POSTGRES_PASSWORD: articles
     volumes:
-      - mongo-data:/data/db
+      - ./docker_init.sql:/docker-entrypoint-initdb.d/docker_init.sql
+#      - pg-data:/data/db
 
 volumes:
   mongo-data:

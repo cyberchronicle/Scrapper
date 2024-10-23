@@ -1,6 +1,7 @@
 scraping:
   host: :9003
+  old_article: 23847623
 
 database:
-  dialect: mongo
-  dsn: mongodb://127.0.0.1:27017
+  dialect: pgx
+  dsn: "host=127.0.0.1 port=5432 user=articles password=articles dbname=scrapping sslmode=disable"
