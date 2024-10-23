@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"scrapping_service/internal/database"
+	"scrapping_service/internal/scrapping/migrations"
 	"scrapping_service/internal/scrapping/repository"
 	"scrapping_service/pkg/middlewares"
 	"scrapping_service/pkg/utils"
@@ -46,6 +47,9 @@ func (s *Service) Configure(conf *Conf, confDb *database.Conf) {
 		// подключаемся к БД
 		db := database.NewDatabase(s.ctx, "database", "scrapping")
 		db.Configure(confDb)
+
+		// запускаем миграции
+		migrations.MigrateUp(db.DBX.DB)
 
 		s.repo = repository.NewRepository(db.DBX)
 
