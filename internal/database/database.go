@@ -13,8 +13,11 @@ import (
 )
 
 type Conf struct {
-	Dialect string `yaml:"dialect"`
-	Dsn     string `yaml:"dsn"`
+	Dialect         string `yaml:"dialect"`
+	Dsn             string `yaml:"dsn"`
+	MaxOpenConns    int    `yaml:"maxOpenConns"`
+	MaxIdleConns    int    `yaml:"maxIdleConns"`
+	ConnMaxLifeTime int    `yaml:"connMaxLifeTime"`
 }
 
 type Database struct {
@@ -61,6 +64,10 @@ func (d *Database) Configure(conf *Conf) {
 			log.Panic().Str("module", d.Name).Msgf("%v", err)
 			panic(err)
 		}
+
+		db.SetMaxOpenConns(conf.MaxOpenConns)
+		db.SetMaxIdleConns(conf.MaxIdleConns)
+		db.SetConnMaxLifetime(time.Second * time.Duration(conf.ConnMaxLifeTime))
 
 		d.DBX = db
 
