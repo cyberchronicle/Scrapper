@@ -210,7 +210,6 @@ loop:
 				log.Error().Str("module", s.Name).Msgf("getArticle error: %v, url: %v", err, i)
 				return
 			}
-			s.kafka.SendAsyncMessage(json.RawMessage(fmt.Sprintf(`{"id":%v}`, article.Id)))
 			result <- article
 		}(i)
 	}
@@ -232,6 +231,7 @@ loop:
 			log.Error().Str("module", s.Name).Msgf("error in repo: %v", err)
 			continue
 		}
+		s.kafka.SendAsyncMessage(json.RawMessage(fmt.Sprintf(`{"id":%v}`, article.Id)))
 	}
 }
 
