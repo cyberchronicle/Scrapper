@@ -1,6 +1,6 @@
 scraping:
   host: :9003
-  old_article: 23847623
+  scrapCron: 15
 
 database:
   dialect: pgx

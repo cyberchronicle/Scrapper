@@ -37,7 +37,8 @@ var (
 )
 
 type Conf struct {
-	Host string `yaml:"host"`
+	Host      string `yaml:"host"`
+	ScrapCron int    `yaml:"scrapCron"`
 }
 
 type Service struct {
@@ -96,7 +97,7 @@ func (s *Service) Configure(conf *Conf, confDb *database.Conf) {
 
 		s.RunWorker(s.start, "start", 1)
 
-		_, err := s.cron.Every(time.Minute * 30).Do(s.scrap)
+		_, err := s.cron.Every(conf.ScrapCron).Minutes().Do(s.scrap)
 		if err != nil {
 			log.Error().Str("module", s.Name).Msgf("start cron for scrapping: %v", err)
 		}
@@ -161,6 +162,7 @@ func (s *Service) start() {
 }
 
 func (s *Service) scrap() {
+	log.Info().Str("module", s.Name).Msg("scrap start")
 	lastArticleSite, err := getLastArticle()
 	if err != nil {
 		log.Error().Str("module", s.Name).Msgf("GetLastArticle from site error: %v", err)
@@ -193,26 +195,29 @@ func (s *Service) scrap() {
 	ids := utils.CreateRangeSlice([2]int64{firstArticle - 50, firstArticle - 1}, [2]int64{lastArticle + 1, lastArticleSite})
 	var wg sync.WaitGroup
 	result := make(chan *models.Article)
-loop:
-	for _, i := range ids {
-		// выходим из цикла
-		select {
-		case <-s.ctx.Done():
-			break loop
-		default:
-		}
-		time.Sleep(50 * time.Millisecond)
-		wg.Add(1)
-		go func(i int64) {
-			defer wg.Done()
-			article, err := s.getArticle(i)
-			if err != nil {
-				log.Error().Str("module", s.Name).Msgf("getArticle error: %v, url: %v", err, i)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for _, i := range ids {
+			// выходим из цикла
+			select {
+			case <-s.ctx.Done():
 				return
+			default:
 			}
-			result <- article
-		}(i)
-	}
+			time.Sleep(50 * time.Millisecond)
+			wg.Add(1)
+			go func(i int64) {
+				defer wg.Done()
+				article, err := s.getArticle(i)
+				if err != nil {
+					log.Error().Str("module", s.Name).Msgf("getArticle error: %v, url: %v", err, i)
+					return
+				}
+				result <- article
+			}(i)
+		}
+	}()
 
 	go func() {
 		wg.Wait()
@@ -233,6 +238,7 @@ loop:
 		}
 		s.kafka.SendAsyncMessage(json.RawMessage(fmt.Sprintf(`{"id":%v}`, article.Id)))
 	}
+	log.Info().Str("module", s.Name).Msg("scrap end")
 }
 
 func getLastArticle() (int64, error) {
@@ -347,7 +353,7 @@ func mapArticle(article *models.Article) (*repository.Article, error) {
 
 func (s *Service) GetArticle(w http.ResponseWriter, r *http.Request) {
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json;charset=utf-8")
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
