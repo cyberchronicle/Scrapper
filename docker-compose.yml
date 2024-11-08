@@ -12,7 +12,48 @@ services:
       POSTGRES_PASSWORD: articles
     volumes:
       - ./docker_init.sql:/docker-entrypoint-initdb.d/docker_init.sql
-#      - pg-data:/data/db
 
-volumes:
-  mongo-data:
+  zookeeper:
+    image: zookeeper:latest
+    ports:
+      - "127.0.0.1:2181:2181"
+
+  kafka:
+    image: wurstmeister/kafka:latest
+    hostname: kafka
+    depends_on:
+      - zookeeper
+    healthcheck:
+      test: nc -vz localhost 9092
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    ports:
+      - "127.0.0.1:9092:9092"
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CREATE_TOPICS: "scrapping:1:1"
+
+  go_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: go_app
+    depends_on:
+      kafka:
+        condition: service_healthy
+      pgdb:
+        condition: service_started
+    volumes:
+      - ./config/config.yaml:/app/config/config.yaml
+    ports:
+      - 9003:9003
+
+networks:
+  default:
+    driver: bridge

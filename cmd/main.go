@@ -1,11 +1,11 @@
 package main
 
 import (
-	"scrapping_service/internal/database"
-	"scrapping_service/internal/scrapping"
-
-	log "github.com/rs/zerolog/log"
+	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
+	"scrapping_service/internal/database"
+	"scrapping_service/internal/kafka"
+	"scrapping_service/internal/scrapping"
 
 	"os"
 	"scrapping_service/pkg/signal"
@@ -16,6 +16,7 @@ var (
 	configPath      = "config/config.yaml"
 	initMain        sync.Once
 	scrapingService *scrapping.Service
+	kafkaService    *kafka.Service
 )
 
 func main() {
@@ -35,6 +36,7 @@ func main() {
 type Conf struct {
 	Scraping *scrapping.Conf `yaml:"scraping"`
 	Database *database.Conf  `yaml:"database"`
+	Kafka    *kafka.Conf     `yaml:"kafka"`
 }
 
 func Configure() error {
@@ -51,8 +53,12 @@ func Configure() error {
 
 	initMain.Do(func() {
 		scrapingService = scrapping.NewService(signal.Context, "scrapping_server", "scrapper")
+		kafkaService = kafka.NewService(signal.Context, "kafka", "scrapper")
+
+		scrapingService.Join(kafkaService)
 	})
 
+	kafkaService.Configure(conf.Kafka)
 	scrapingService.Configure(conf.Scraping, conf.Database)
 	return nil
 }

@@ -56,7 +56,7 @@ func (d *Database) Configure(conf *Conf) {
 		db, err := sqlx.Connect(conf.Dialect, conf.Dsn)
 		if err != nil {
 			err = fmt.Errorf("error in sqlx.Connect: %v", err)
-			log.Panic().Err(err)
+			log.Panic().Str("module", d.Name).Err(err)
 			panic(err)
 		}
 		if err = db.Ping(); err != nil {

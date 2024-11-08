@@ -2,14 +2,19 @@ package scrapping
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	md "github.com/JohannesKaufmann/html-to-markdown"
+	"github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/go-co-op/gocron"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"net/http"
 	"scrapping_service/internal/database"
+	"scrapping_service/internal/kafka"
 	"scrapping_service/internal/scrapping/migrations"
 	"scrapping_service/internal/scrapping/models"
 	"scrapping_service/internal/scrapping/repository"
@@ -22,6 +27,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
+)
+
+var (
+	articleMetric = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "articles",
+		Help: "The total number of successful article parsings",
+	})
 )
 
 type Conf struct {
@@ -37,6 +49,7 @@ type Service struct {
 
 	server *http.Server
 	client *http.Client
+	kafka  kafka.Kafka
 
 	repo *repository.Repository
 
@@ -53,6 +66,10 @@ func NewService(ctx context.Context, name, namespace string) *Service {
 		cron:      gocron.NewScheduler(time.UTC),
 		converter: md.NewConverter("", true, nil),
 	}
+}
+
+func (s *Service) Join(kafka kafka.Kafka) {
+	s.kafka = kafka
 }
 
 func (s *Service) Configure(conf *Conf, confDb *database.Conf) {
@@ -111,6 +128,10 @@ func (s *Service) start() {
 
 	r.Get("/api/v1/scrapper/health", checkHealth)
 
+	r.Get("/api/v1/scrapper/article/{id}", s.GetArticle)
+
+	r.Handle("/metrics", promhttp.Handler())
+
 	for {
 
 		conf := s.getConf()
@@ -149,7 +170,7 @@ func (s *Service) scrap() {
 	lastArticle, err := s.repo.GetLastArticle(s.ctx)
 	if err != nil {
 		if repository.IsNotFoundError(err) {
-			lastArticle = lastArticleSite - 30
+			lastArticle = lastArticleSite - 50
 		} else {
 			log.Error().Str("module", s.Name).Msgf("GetLastArticle from repo error: %v", err)
 			return
@@ -160,19 +181,47 @@ func (s *Service) scrap() {
 		return
 	}
 
-	for i := lastArticle + 1; i <= lastArticleSite; i++ {
+	firstArticle, err := s.repo.GetFirstArticle(s.ctx)
+	if err != nil {
+		if repository.IsNotFoundError(err) {
+			firstArticle = lastArticle - 1
+		} else {
+			log.Error().Str("module", s.Name).Msgf("GetFirstArticle from repo error: %v", err)
+			return
+		}
+	}
+	ids := utils.CreateRangeSlice([2]int64{firstArticle - 50, firstArticle - 1}, [2]int64{lastArticle + 1, lastArticleSite})
+	var wg sync.WaitGroup
+	result := make(chan *models.Article)
+loop:
+	for _, i := range ids {
 		// выходим из цикла
 		select {
 		case <-s.ctx.Done():
-			return
+			break loop
 		default:
 		}
+		time.Sleep(50 * time.Millisecond)
+		wg.Add(1)
+		go func(i int64) {
+			defer wg.Done()
+			article, err := s.getArticle(i)
+			if err != nil {
+				log.Error().Str("module", s.Name).Msgf("getArticle error: %v, url: %v", err, i)
+				return
+			}
+			s.kafka.SendAsyncMessage(json.RawMessage(fmt.Sprintf(`{"id":%v}`, article.Id)))
+			result <- article
+		}(i)
+	}
 
-		article, err := s.getArticle(i)
-		if err != nil {
-			log.Error().Str("module", s.Name).Msgf("getArticle error: %v", err)
-			continue
-		}
+	go func() {
+		wg.Wait()
+		close(result)
+	}()
+
+	for article := range result {
+		articleMetric.Inc()
 		repoArticle, err := mapArticle(article)
 		if err != nil {
 			log.Error().Str("module", s.Name).Msgf("mapArticle error: %v", err)
@@ -282,14 +331,64 @@ func mapArticle(article *models.Article) (*repository.Article, error) {
 	if err != nil {
 		return nil, err
 	}
+	complexity := sql.NullString{String: article.Complexity}
+	if complexity.String != "" {
+		complexity.Valid = true
+	}
 	return &repository.Article{
 		Id:          article.Id,
 		Name:        article.Name,
 		Text:        article.Text,
-		Complexity:  article.Complexity,
+		Complexity:  complexity,
 		ReadingTime: article.ReadingTime,
 		Tags:        tags,
 	}, nil
+}
+
+func (s *Service) GetArticle(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	dbArticle, err := s.repo.GetArticleById(r.Context(), id)
+	if err != nil {
+		if repository.IsNotFoundError(err) {
+			http.NotFound(w, r)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+		}
+		return
+	}
+	var tags []string
+	err = json.Unmarshal(dbArticle.Tags, &tags)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	article := models.Article{
+		Id:          dbArticle.Id,
+		Name:        dbArticle.Name,
+		Text:        dbArticle.Text,
+		Complexity:  dbArticle.Complexity.String,
+		ReadingTime: dbArticle.ReadingTime,
+		Tags:        tags,
+	}
+	response, err := json.Marshal(article)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write(response)
 }
 
 func (s *Service) WaitTerminate() {
