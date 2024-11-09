@@ -1,0 +1,15 @@
+scraping:
+  host: :9003
+  scrapCron: 5
+
+database:
+  dialect: pgx
+  dsn: "host=pgdb port=5432 user=articles password=articles dbname=scrapping sslmode=disable"
+  maxOpenConns: 10
+  maxIdleConns: 5
+  connMaxLifeTime: 3600
+
+kafka:
+  topic: "scrapping"
+  brokers:
+    - "kafka:29092"

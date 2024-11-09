@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	zlog "github.com/rs/zerolog/log"
+	log "github.com/rs/zerolog/log"
 )
 
 func Logger(name string) func(handler http.Handler) http.Handler {
@@ -12,7 +12,7 @@ func Logger(name string) func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			next.ServeHTTP(w, r)
-			zlog.Info().Msgf("%s: %s %s %s", name, r.Method, r.RequestURI, time.Since(start))
+			log.Info().Msgf("%s: %s %s %s", name, r.Method, r.RequestURI, time.Since(start))
 		})
 	}
 }

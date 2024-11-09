@@ -1,29 +1,32 @@
 package main
 
 import (
-	"scrapping_service/internal/database"
-
-	zlog "github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
+	"scrapping_service/internal/database"
+	"scrapping_service/internal/kafka"
+	"scrapping_service/internal/scrapping"
 
 	"os"
-	"scrapping_service/internal/scraping_server"
 	"scrapping_service/pkg/signal"
 	"sync"
 )
 
 var (
-	configPath     = "config/config.yaml"
-	initMain       sync.Once
-	scrapingServer *scraping_server.Service
+	configPath      = "config/config.yaml"
+	initMain        sync.Once
+	scrapingService *scrapping.Service
+	kafkaService    *kafka.Service
 )
 
 func main() {
-	zlog.Info().Msg("service starting...")
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
+	log.Info().Msg("service starting...")
 
 	err := Configure()
 	if err != nil {
-		zlog.Err(err)
+		log.Err(err)
 		return
 	}
 
@@ -33,8 +36,9 @@ func main() {
 }
 
 type Conf struct {
-	scraping *scraping_server.Conf
-	database *database.Conf
+	Scraping *scrapping.Conf `yaml:"scraping"`
+	Database *database.Conf  `yaml:"database"`
+	Kafka    *kafka.Conf     `yaml:"kafka"`
 }
 
 func Configure() error {
@@ -50,10 +54,14 @@ func Configure() error {
 	}
 
 	initMain.Do(func() {
-		scrapingServer = scraping_server.NewServer(signal.Context, "scrapping_server", "scrapper")
+		scrapingService = scrapping.NewService(signal.Context, "scrapping_server", "scrapper")
+		kafkaService = kafka.NewService(signal.Context, "kafka", "scrapper")
+
+		scrapingService.Join(kafkaService)
 	})
 
-	scrapingServer.Configure(conf.scraping, conf.database)
+	kafkaService.Configure(conf.Kafka)
+	scrapingService.Configure(conf.Scraping, conf.Database)
 	return nil
 }
 
@@ -63,9 +71,9 @@ func WaitTerminate() {
 
 	<-signal.Context.Done()
 
-	zlog.Info().Msg("term: begin")
+	log.Info().Msg("term: begin")
 
-	scrapingServer.WaitTerminate()
+	scrapingService.WaitTerminate()
 
-	zlog.Info().Msg("term: end")
+	log.Info().Msg("term: end")
 }
