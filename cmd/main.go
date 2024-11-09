@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
 	"scrapping_service/internal/database"
@@ -20,6 +21,7 @@ var (
 )
 
 func main() {
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
 	log.Info().Msg("service starting...")
 
 	err := Configure()

@@ -1,6 +1,6 @@
 scraping:
   host: :9003
-  scrapCron: 15
+  scrapCron: 5
 
 database:
   dialect: pgx
