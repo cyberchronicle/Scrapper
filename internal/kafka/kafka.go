@@ -91,7 +91,8 @@ func (s *Service) kafkaSuccess() {
 		case <-s.ctx.Done():
 			return
 		case msg := <-s.producer.Successes():
-			log.Error().Str("module", s.Name).Msgf("kafka success: %v", msg.Value)
+			value, _ := msg.Value.Encode()
+			log.Info().Str("module", s.Name).Msgf("kafka success: %v", string(value))
 		}
 	}
 }
