@@ -8,18 +8,22 @@ import (
 	"syscall"
 	"time"
 
-	log "github.com/rs/zerolog/log"
+	zlog "github.com/rs/zerolog/log"
 )
 
 var (
 	Context           context.Context
 	WaitGroup         sync.WaitGroup
+	done              chan interface{}
 	gracefulTerminate chan os.Signal
 	cancelFunc        context.CancelFunc
 )
 
 // Init Graceful Terminating
 func init() {
+	// создаем канал завершения программы
+	done = make(chan interface{})
+
 	// создаём контекст для выполнения задач
 	Context, cancelFunc = context.WithCancel(context.Background())
 
@@ -33,21 +37,22 @@ func init() {
 func Wait() {
 	sig := <-gracefulTerminate
 
-	log.Info().Msg(sig.String())
+	zlog.Info().Msg(sig.String())
 
 	// сообщаем всем воркерам что необходимо остановить работу
 	cancelFunc()
 
 	// ожидаем остановки воркеров n секунд
 	if WaitTimeout(&WaitGroup, time.Second*60) {
-		log.Error().Msg("signal: completion waiting timed out")
+		zlog.Error().Msg("signal: completion waiting timed out")
 
 	} else {
-		log.Info().Msg("signal: all services successfully completed")
+		zlog.Info().Msg("signal: all services successfully completed")
 	}
 
 	// завершаем программу
-	log.Info().Msg("signal: terminated")
+	zlog.Info().Msg("signal: terminated")
+	close(done)
 
 	os.Exit(0)
 }
