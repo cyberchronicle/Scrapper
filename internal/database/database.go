@@ -3,27 +3,25 @@ package database
 import (
 	"context"
 	"fmt"
-	_ "github.com/jackc/pgx/v4/stdlib"
-	"github.com/jmoiron/sqlx"
 	"scrapping_service/pkg/utils"
 	"sync"
 	"time"
 
-	"github.com/rs/zerolog/log"
+	zlog "github.com/rs/zerolog/log"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
 type Conf struct {
-	Dialect         string `yaml:"dialect"`
-	Dsn             string `yaml:"dsn"`
-	MaxOpenConns    int    `yaml:"maxOpenConns"`
-	MaxIdleConns    int    `yaml:"maxIdleConns"`
-	ConnMaxLifeTime int    `yaml:"connMaxLifeTime"`
+	Dialect string `yaml:"dialect"`
+	Dsn     string `yaml:"dsn"`
 }
 
 type Database struct {
 	utils.Conv
 
-	DBX   *sqlx.DB
+	DB    *mongo.Client
 	ctx   context.Context
 	xConf sync.RWMutex
 	conf  *Conf
@@ -46,30 +44,20 @@ func NewDatabase(ctx context.Context, name, namespace string) *Database {
 }
 
 func (d *Database) Configure(conf *Conf) {
-	log.Info().Str("module", d.Name).Msgf("database %s conf: configure begin", d.Name)
+	zlog.Info().Msgf("database %s conf: configure begin", d.Name)
 
 	d.setConf(conf)
 
 	d.Load.Do(func() {
-		log.Info().Str("module", d.Name).Msg("database connecting...")
+		zlog.Info().Msg("database connecting...")
 
-		db, err := sqlx.Connect(conf.Dialect, conf.Dsn)
+		db, err := mongo.Connect(d.ctx, options.Client().ApplyURI(d.getConf().Dsn))
 		if err != nil {
-			err = fmt.Errorf("error in sqlx.Connect: %v", err)
-			log.Panic().Str("module", d.Name).Err(err)
+			err = fmt.Errorf("error in mongo.Connect: %v", err)
+			zlog.Panic().Err(err)
 			panic(err)
 		}
-		if err = db.Ping(); err != nil {
-			err = fmt.Errorf("error in db.Ping: %v", err)
-			log.Panic().Str("module", d.Name).Msgf("%v", err)
-			panic(err)
-		}
-
-		db.SetMaxOpenConns(conf.MaxOpenConns)
-		db.SetMaxIdleConns(conf.MaxIdleConns)
-		db.SetConnMaxLifetime(time.Second * time.Duration(conf.ConnMaxLifeTime))
-
-		d.DBX = db
+		d.DB = db
 
 		d.RunWorker(d.ping, "ping", 1)
 	})
@@ -77,11 +65,11 @@ func (d *Database) Configure(conf *Conf) {
 
 func (d *Database) ping() {
 	defer func() {
-		_ = d.DBX.Close()
+		_ = d.DB.Disconnect(d.ctx)
 	}()
 	for {
-		if err := d.DBX.Ping(); err != nil {
-			log.Error().Str("module", d.Name).Msgf("database error in ping: %v", err)
+		if err := d.DB.Ping(d.ctx, readpref.Primary()); err != nil {
+			zlog.Error().Msgf("database error in ping: %v", err)
 		}
 
 		select {
@@ -93,9 +81,9 @@ func (d *Database) ping() {
 }
 
 func (d *Database) WaitTerminate() {
-	log.Info().Str("module", d.Name).Msg("database term: begin")
+	zlog.Info().Msg("database term: begin")
 
-	_ = d.DBX.Close()
+	_ = d.DB.Disconnect(d.ctx)
 
-	log.Info().Str("module", d.Name).Msg("database term: end")
+	zlog.Info().Msg("database term: end")
 }

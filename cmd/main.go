@@ -1,32 +1,29 @@
 package main
 
 import (
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
-	"gopkg.in/yaml.v2"
 	"scrapping_service/internal/database"
-	"scrapping_service/internal/kafka"
-	"scrapping_service/internal/scrapping"
+
+	zlog "github.com/rs/zerolog/log"
+	"gopkg.in/yaml.v2"
 
 	"os"
+	"scrapping_service/internal/scraping_server"
 	"scrapping_service/pkg/signal"
 	"sync"
 )
 
 var (
-	configPath      = "config/config.yaml"
-	initMain        sync.Once
-	scrapingService *scrapping.Service
-	kafkaService    *kafka.Service
+	configPath     = "config/config.yaml"
+	initMain       sync.Once
+	scrapingServer *scraping_server.Service
 )
 
 func main() {
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
-	log.Info().Msg("service starting...")
+	zlog.Info().Msg("service starting...")
 
 	err := Configure()
 	if err != nil {
-		log.Err(err)
+		zlog.Err(err)
 		return
 	}
 
@@ -36,9 +33,8 @@ func main() {
 }
 
 type Conf struct {
-	Scraping *scrapping.Conf `yaml:"scraping"`
-	Database *database.Conf  `yaml:"database"`
-	Kafka    *kafka.Conf     `yaml:"kafka"`
+	scraping *scraping_server.Conf
+	database *database.Conf
 }
 
 func Configure() error {
@@ -54,14 +50,10 @@ func Configure() error {
 	}
 
 	initMain.Do(func() {
-		scrapingService = scrapping.NewService(signal.Context, "scrapping_server", "scrapper")
-		kafkaService = kafka.NewService(signal.Context, "kafka", "scrapper")
-
-		scrapingService.Join(kafkaService)
+		scrapingServer = scraping_server.NewServer(signal.Context, "scrapping_server", "scrapper")
 	})
 
-	kafkaService.Configure(conf.Kafka)
-	scrapingService.Configure(conf.Scraping, conf.Database)
+	scrapingServer.Configure(conf.scraping, conf.database)
 	return nil
 }
 
@@ -71,9 +63,9 @@ func WaitTerminate() {
 
 	<-signal.Context.Done()
 
-	log.Info().Msg("term: begin")
+	zlog.Info().Msg("term: begin")
 
-	scrapingService.WaitTerminate()
+	scrapingServer.WaitTerminate()
 
-	log.Info().Msg("term: end")
+	zlog.Info().Msg("term: end")
 }
