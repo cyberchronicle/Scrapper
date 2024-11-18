@@ -1,0 +1,33 @@
+scalar Int64
+
+type Query {
+    articles(page:Int64!=1, pageSize:Int64!=20): ArticlesPagination
+    like(article:Int64!): Status
+    unlike(article:Int64!): Status
+}
+
+type Article{
+    id: ID!
+    name: String!
+    text: String!
+    complexity: String!
+    readingTime: String!
+    tags: [String!]!
+}
+
+type ArticlesPagination {
+    items: [Article!]!
+    pageInfo: PaginationInfo!
+}
+
+type PaginationInfo {
+    page: Int!
+    pageSize: Int!
+    hasNextPage: Boolean!
+    hasPreviousPage: Boolean!
+}
+
+enum Status {
+    SUCCESS
+    FAIL
+}
