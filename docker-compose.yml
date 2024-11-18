@@ -39,11 +39,9 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_CREATE_TOPICS: "scrapping:1:1"
 
-  go_app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: go_app
+  scrapping:
+    image: drc0de/scrapping:1.0.0
+    container_name: scrapping
     depends_on:
       kafka:
         condition: service_healthy

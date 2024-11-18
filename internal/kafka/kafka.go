@@ -7,6 +7,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"scrapping_service/pkg/utils"
 	"sync"
+	"time"
 )
 
 type Kafka interface {
@@ -14,8 +15,9 @@ type Kafka interface {
 }
 
 type Conf struct {
-	Topic   string   `yaml:"topic"`
-	Brokers []string `yaml:"brokers"`
+	Topic       string   `yaml:"topic"`
+	Brokers     []string `yaml:"brokers"`
+	DialTimeout int      `yaml:"dialTimeout"`
 }
 
 type Service struct {
@@ -52,6 +54,7 @@ func (s *Service) Configure(conf *Conf) {
 
 		producerConfig.Producer.Return.Errors = true
 		producerConfig.Producer.Return.Successes = true
+		producerConfig.Net.DialTimeout = time.Duration(conf.DialTimeout) * time.Second
 
 		producer, err := sarama.NewAsyncProducer(conf.Brokers, producerConfig)
 		if err != nil {
@@ -113,6 +116,7 @@ func (s *Service) WaitTerminate() {
 	log.Info().Str("module", s.Name).Msg("term: begin")
 
 	s.WaitWorker("kafka_errors")
+	s.WaitWorker("kafka_success")
 
 	log.Info().Str("module", s.Name).Msg("term: end ")
 }

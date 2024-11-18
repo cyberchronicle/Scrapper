@@ -13,3 +13,4 @@ kafka:
   topic: "scrapping"
   brokers:
     - "kafka:29092"
+  dialTimeout: 20

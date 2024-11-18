@@ -25,9 +25,6 @@ FROM alpine:latest
 
 WORKDIR /app
 
-# Копируем  конфигурационный файл
-COPY --from=builder /build/config/config.yaml /app/config/config.yaml
-
 # Копируем скомпилированный бинарник из предыдущего этапа
 COPY --from=builder /build/main /app/main
 

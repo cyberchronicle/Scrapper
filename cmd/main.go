@@ -72,6 +72,7 @@ func WaitTerminate() {
 	log.Info().Msg("term: begin")
 
 	scrapingService.WaitTerminate()
+	kafkaService.WaitTerminate()
 
 	log.Info().Msg("term: end")
 }
