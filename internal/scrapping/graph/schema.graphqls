@@ -2,6 +2,9 @@ scalar Int64
 
 type Query {
     articles(page:Int64!=1, pageSize:Int64!=20): ArticlesPagination
+}
+
+type Mutation {
     like(article:Int64!): Status
     unlike(article:Int64!): Status
 }
