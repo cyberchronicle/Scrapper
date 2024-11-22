@@ -9,17 +9,19 @@ type Mutation {
     unlike(article:Int64!): Status
 }
 
-type Article{
+type ArticleInfo {
     id: ID!
     name: String!
     text: String!
     complexity: String!
     readingTime: String!
     tags: [String!]!
+    likes: Int!
+    likedByUser: Boolean!
 }
 
 type ArticlesPagination {
-    items: [Article!]!
+    items: [ArticleInfo!]!
     pageInfo: PaginationInfo!
 }
 
