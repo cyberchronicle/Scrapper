@@ -1,16 +1,18 @@
 scalar Int64
+scalar Id
 
 type Query {
-    articles(page:Int64!=1, pageSize:Int64!=20): ArticlesPagination
+    articles(page:Int!=1, pageSize:Int!=20): ArticlesPagination
+    article(id:Int!): ArticleInfo
 }
 
 type Mutation {
-    like(article:Int64!): Status
-    unlike(article:Int64!): Status
+    like(article:Int!): LikePayload
+    unlike(article:Int!): UnlikePayload
 }
 
 type ArticleInfo {
-    id: ID!
+    id: Int!
     name: String!
     text: String!
     complexity: String!
@@ -30,6 +32,14 @@ type PaginationInfo {
     pageSize: Int!
     hasNextPage: Boolean!
     hasPreviousPage: Boolean!
+}
+
+type LikePayload {
+    status: Status!
+}
+
+type UnlikePayload {
+    status: Status!
 }
 
 enum Status {

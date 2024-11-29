@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -74,4 +75,126 @@ func (r *Repository) GetArticleById(ctx context.Context, id int) (*Article, erro
 		return nil, fmt.Errorf("GetArticleById db error: %v", err)
 	}
 	return article, nil
+}
+
+func (r *Repository) GetArticlesInfo(ctx context.Context, userId int, cursor *Cursor) ([]*ArticleInfo, *PaginationInfo, error) {
+	if cursor != nil {
+		err := cursor.Validate()
+		if err != nil {
+			return nil, nil, fmt.Errorf("%w: %v", ErrInvalidCursor, err)
+		}
+	} else {
+		return nil, nil, fmt.Errorf("cursor is empty")
+	}
+
+	query := `
+		WITH liked_articles AS (
+			SELECT article_id
+			FROM scrapping.likes
+			WHERE user_id = $1
+		),
+		article_likes AS (
+			SELECT article_id, COUNT(*) AS like_count
+			FROM scrapping.likes
+			GROUP BY article_id
+		)
+		SELECT a.id, a.name, a.text, a.complexity, a.reading_time, a.tags,
+			   COALESCE(al.like_count, 0) AS like_count,
+			   CASE WHEN la.article_id IS NOT NULL THEN true ELSE false END AS liked_by_user
+		FROM scrapping.articles a
+		LEFT JOIN article_likes al ON a.id = al.article_id
+		LEFT JOIN liked_articles la ON a.id = la.article_id
+		ORDER BY a.id
+		%s;
+    `
+	limit := cursor.limitPlusOne()
+
+	query = fmt.Sprintf(query, limit)
+
+	result := make([]*ArticleInfo, 0)
+
+	err := r.db.SelectContext(ctx, &result, query, userId)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, errNotFound
+		}
+		return nil, nil, fmt.Errorf("error in db: %v", err)
+	}
+	hasNextPage := false
+	if len(result) > cursor.limit() {
+		hasNextPage = true
+		result = result[:len(result)-1]
+	}
+	return result, &PaginationInfo{
+		HasNextPage:     hasNextPage,
+		HasPreviousPage: cursor.offset() > 0,
+	}, nil
+}
+
+func (r *Repository) GetArticleInfoById(ctx context.Context, userId, articleId int) (*ArticleInfo, error) {
+	query := `
+		WITH liked_articles AS (
+			SELECT article_id
+			FROM scrapping.likes
+			WHERE user_id = $1
+		),
+		article_likes AS (
+			SELECT article_id, COUNT(*) AS like_count
+			FROM scrapping.likes
+			GROUP BY article_id
+		)
+		SELECT a.id, a.name, a.text, a.complexity, a.reading_time, a.tags,
+			   COALESCE(al.like_count, 0) AS like_count,
+			   CASE WHEN la.article_id IS NOT NULL THEN true ELSE false END AS liked_by_user
+		FROM scrapping.articles a
+		LEFT JOIN article_likes al ON a.id = al.article_id
+		LEFT JOIN liked_articles la ON a.id = la.article_id
+		WHERE id = $2
+		ORDER BY a.id;
+    `
+
+	var article ArticleInfo
+	err := r.db.GetContext(ctx, &article, query, userId, articleId)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errNotFound
+		}
+		return nil, fmt.Errorf("db error: %v", err)
+	}
+	return &article, nil
+}
+
+func (r *Repository) Like(ctx context.Context, userId, articleId int) error {
+	query := `INSERT INTO scrapping.likes (user_id, article_id) VALUES ($1, $2)`
+
+	_, err := r.db.ExecContext(ctx, query, userId, articleId)
+	if err != nil {
+		var pqErr *pgconn.PgError
+		if errors.As(err, &pqErr) {
+			switch pqErr.Code {
+			case "23503":
+				return fmt.Errorf("non exist article")
+			case "23505":
+				return fmt.Errorf("like already exist")
+			}
+		}
+		return fmt.Errorf("error in db: %v", err)
+	}
+	return nil
+}
+
+func (r *Repository) Unlike(ctx context.Context, userId, articleId int) error {
+	query := `DELETE FROM scrapping.likes WHERE user_id = $1 AND article_id = $2`
+	rows, err := r.db.ExecContext(ctx, query, userId, articleId)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := rows.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("no likes were found")
+	}
+	return nil
 }

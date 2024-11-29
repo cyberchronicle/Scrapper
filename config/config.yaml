@@ -4,7 +4,7 @@ scraping:
 
 database:
   dialect: pgx
-  dsn: "host=pgdb port=5432 user=articles password=articles dbname=scrapping sslmode=disable"
+  dsn: "host=localhost port=5432 user=articles password=articles dbname=scrapping sslmode=disable"
   maxOpenConns: 10
   maxIdleConns: 5
   connMaxLifeTime: 3600
@@ -12,5 +12,5 @@ database:
 kafka:
   topic: "scrapping"
   brokers:
-    - "kafka:29092"
+    - "localhost:9092"
   dialTimeout: 20
