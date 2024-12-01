@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS scrapping.likes
     article_id INTEGER NOT NULL,
     liked_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id, article_id),
-    FOREIGN KEY (article_id) REFERENCES articles (id)
+    FOREIGN KEY (article_id) REFERENCES scrapping.articles (id)
 )
 -- +goose StatementEnd
 
