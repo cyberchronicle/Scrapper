@@ -158,13 +158,13 @@ func (s *Service) start() {
 
 	r.Use(middlewares.Logger(s.Name))
 
-	r.Get("/api/v1/scrapper/health", checkHealth)
+	r.Get("/api/v1/scrapping/health", checkHealth)
 
-	r.Get("/api/v1/scrapper/article/{id}", s.GetArticle)
+	r.Get("/api/v1/scrapping/article/{id}", s.GetArticle)
 
-	r.Handle("/scrapping/v1/graph/scrapping/query", middlewares.Auth(srv))
+	r.Handle("/api/v1/scrapping/graph/query", middlewares.Auth(srv))
 
-	r.Handle("/scrapping/v1/graph/scrapping/playground", playground.AltairHandler("GraphQL Scrapping Playground", "/scrapping/v1/graph/scrapping/query"))
+	r.Handle("/api/v1/scrapping/graph/playground", playground.AltairHandler("GraphQL Scrapping Playground", "/scrapping/v1/graph/scrapping/query"))
 
 	r.Handle("/metrics", promhttp.Handler())
 

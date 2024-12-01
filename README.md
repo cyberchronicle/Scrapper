@@ -20,13 +20,13 @@
 
 ### GraphQL Сервер
 
-- Адрес сервера: http://localhost:9003/scrapping/v1/graph/scrapping/query
+- Адрес сервера: http://localhost:9003/api/v1/scrapping/graph/query
 
   Используйте этот адрес для отправки запросов на сервер.
 
 ### GraphQL Playground
 
-- Интерактивное окружение: http://localhost:9003/scrapping/v1/graph/scrapping/playground
+- Интерактивное окружение: http://localhost:9003/api/v1/scrapping/graph/playground
 
   Здесь вы можете писать и тестировать свои запросы в интерактивной среде.
 

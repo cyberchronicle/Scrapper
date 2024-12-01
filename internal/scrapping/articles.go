@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"scrapping_service/internal/scrapping/external"
 	"scrapping_service/internal/scrapping/repository"
+	"scrapping_service/pkg/middlewares"
+	"strconv"
 )
 
 func (s *Service) GetArticles(ctx context.Context, userId int, page, pageSize int) ([]*external.ArticleInfo, *external.PaginationInfo, error) {
@@ -82,4 +85,63 @@ func (s *Service) Unlike(ctx context.Context, userId, articleId int) error {
 		return err
 	}
 	return nil
+}
+
+func (s *Service) Articles(w http.ResponseWriter, r *http.Request) {
+	userIdStr := r.Header.Get(middlewares.UserId)
+	if userIdStr == "" {
+		http.Error(w, "User-Id required", http.StatusBadRequest)
+	}
+	userId, err := strconv.Atoi(userIdStr)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	var ids []int
+
+	err = json.NewEncoder(w).Encode(ids)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	articlesInfo, err := s.GetArticlesByIds(r.Context(), userId, ids)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("GetArticlesByIds error: %v", err), http.StatusInternalServerError)
+		return
+	}
+	bytes, err := json.Marshal(articlesInfo)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("marshal response error: %v", err), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write(bytes)
+}
+
+func (s *Service) GetArticlesByIds(ctx context.Context, userId int, ids []int) ([]*external.ArticleInfo, error) {
+	repoArticles, err := s.repo.GetArticlesByIds(ctx, userId, ids)
+	if err != nil {
+		return nil, fmt.Errorf("error in repo: %v", err)
+	}
+	articlesInfo := make([]*external.ArticleInfo, 0, len(repoArticles))
+	for _, article := range repoArticles {
+		var tags []string
+		err = json.Unmarshal(article.Tags, &tags)
+		if err != nil {
+			return nil, fmt.Errorf("error unmarshall tags: %v", err)
+		}
+		articlesInfo = append(articlesInfo, &external.ArticleInfo{
+			ID:          article.ID,
+			Name:        article.Name,
+			Text:        article.Text,
+			Complexity:  article.Complexity.String,
+			ReadingTime: article.ReadingTime,
+			Tags:        tags,
+			Likes:       article.LikeCount,
+			LikedByUser: article.LikedByUser,
+		})
+	}
+
+	return articlesInfo, nil
 }

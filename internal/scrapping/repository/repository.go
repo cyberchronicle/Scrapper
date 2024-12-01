@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 var errNotFound = errors.New("obj not found")
@@ -197,4 +198,39 @@ func (r *Repository) Unlike(ctx context.Context, userId, articleId int) error {
 		return fmt.Errorf("no likes were found")
 	}
 	return nil
+}
+
+func (r *Repository) GetArticlesByIds(ctx context.Context, userId int, ids []int) ([]*ArticleInfo, error) {
+	query := `
+		WITH liked_articles AS (
+			SELECT article_id
+			FROM scrapping.likes
+			WHERE user_id = $1
+		),
+		article_likes AS (
+			SELECT article_id, COUNT(*) AS like_count
+			FROM scrapping.likes
+			GROUP BY article_id
+		)
+		SELECT a.id, a.name, a.text, a.complexity, a.reading_time, a.tags,
+			   COALESCE(al.like_count, 0) AS like_count,
+			   CASE WHEN la.article_id IS NOT NULL THEN true ELSE false END AS liked_by_user
+		FROM scrapping.articles a
+		LEFT JOIN article_likes al ON a.id = al.article_id
+		LEFT JOIN liked_articles la ON a.id = la.article_id
+		WHERE id = ANY($2)
+		ORDER BY a.id;
+    `
+
+	var articles []*ArticleInfo
+
+	err := r.db.GetContext(ctx, &articles, query, userId, pq.Array(ids))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errNotFound
+		}
+		return nil, err
+	}
+
+	return articles, nil
 }
