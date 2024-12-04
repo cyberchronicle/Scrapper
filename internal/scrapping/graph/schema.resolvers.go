@@ -7,17 +7,18 @@ package graph
 import (
 	"context"
 	"fmt"
-	"github.com/99designs/gqlgen/graphql"
 	"scrapping_service/internal/scrapping/graph/models"
 	"scrapping_service/internal/scrapping/graph/server"
 	"scrapping_service/pkg/middlewares"
 	"strconv"
+
+	"github.com/99designs/gqlgen/graphql"
 )
 
 // Like is the resolver for the like field.
 func (r *mutationResolver) Like(ctx context.Context, article int) (*models.LikePayload, error) {
 	graphql.AddError(ctx, nil)
-	userId, err := getUserId(ctx)
+	userId, err := middlewares.GetUserId(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +31,7 @@ func (r *mutationResolver) Like(ctx context.Context, article int) (*models.LikeP
 
 // Unlike is the resolver for the unlike field.
 func (r *mutationResolver) Unlike(ctx context.Context, article int) (*models.UnlikePayload, error) {
-	userId, err := getUserId(ctx)
+	userId, err := middlewares.GetUserId(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +44,7 @@ func (r *mutationResolver) Unlike(ctx context.Context, article int) (*models.Unl
 
 // Articles is the resolver for the articles field.
 func (r *queryResolver) Articles(ctx context.Context, page int, pageSize int) (*models.ArticlesPagination, error) {
-	userId, err := getUserId(ctx)
+	userId, err := middlewares.GetUserId(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +79,7 @@ func (r *queryResolver) Articles(ctx context.Context, page int, pageSize int) (*
 
 // Article is the resolver for the article field.
 func (r *queryResolver) Article(ctx context.Context, id int) (*models.ArticleInfo, error) {
-	userId, err := getUserId(ctx)
+	userId, err := middlewares.GetUserId(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -96,14 +97,6 @@ func (r *queryResolver) Article(ctx context.Context, id int) (*models.ArticleInf
 		Likes:       articleInfo.Likes,
 		LikedByUser: articleInfo.LikedByUser,
 	}, nil
-}
-
-func getUserId(ctx context.Context) (int, error) {
-	userId, ok := ctx.Value(middlewares.UserId).(int)
-	if !ok {
-		return 0, fmt.Errorf("User-Id is requried")
-	}
-	return userId, nil
 }
 
 // Mutation returns server.MutationResolver implementation.

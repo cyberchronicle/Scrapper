@@ -1,6 +1,7 @@
 scraping:
   host: :9003
   scrapCron: 3
+  checkAuth: false
 
 database:
   dialect: pgx

@@ -1,11 +1,13 @@
 package main
 
 import (
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
 	"scrapping_service/internal/database"
 	"scrapping_service/internal/kafka"
 	"scrapping_service/internal/scrapping"
+	"time"
 
 	"os"
 	"scrapping_service/pkg/signal"
@@ -20,6 +22,7 @@ var (
 )
 
 func main() {
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.DateTime})
 	log.Info().Msg("service starting...")
 
 	err := Configure()

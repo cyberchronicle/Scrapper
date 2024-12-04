@@ -44,6 +44,7 @@ var (
 type Conf struct {
 	Host      string `yaml:"host"`
 	ScrapCron int    `yaml:"scrapCron"`
+	CheckAuth bool   `yaml:"checkAuth"`
 }
 
 type Service struct {
@@ -146,23 +147,13 @@ func (s *Service) start() {
 	r := chi.NewRouter()
 
 	// todo для локальных тестов с фронтендом, для прода убрать
-	_ = cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3003"},
-		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
-		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: true,
-		MaxAge:           300,
-		Logger:           &log.Logger,
-	}).Handler
-
-	r.Use(middlewares.Logger(s.Name))
+	r.Use(middlewares.Logger(s.Name), cors.AllowAll().Handler)
 
 	r.Get("/api/v1/scrapping/health", checkHealth)
 
 	r.Get("/api/v1/scrapping/article/{id}", s.GetArticle)
 
-	r.Handle("/api/v1/scrapping/graph/query", middlewares.Auth(srv))
+	r.Handle("/api/v1/scrapping/graph/query", middlewares.Auth(srv, s.getConf().CheckAuth))
 
 	r.Handle("/api/v1/scrapping/graph/playground", playground.AltairHandler("GraphQL Scrapping Playground", "/scrapping/v1/graph/scrapping/query"))
 
@@ -248,7 +239,7 @@ func (s *Service) scrap() {
 				defer wg.Done()
 				article, err := s.getArticle(i)
 				if err != nil {
-					log.Error().Str("module", s.Name).Msgf("getArticle error: %v, url: %v", err, i)
+					log.Info().Str("module", s.Name).Msgf("getArticle error: %v, url: %v", err, i)
 					return
 				}
 				result <- article
