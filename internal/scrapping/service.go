@@ -155,7 +155,7 @@ func (s *Service) start() {
 
 	r.Handle("/api/v1/scrapping/graph/query", middlewares.Auth(srv, s.getConf().CheckAuth))
 
-	r.Handle("/api/v1/scrapping/graph/playground", playground.AltairHandler("GraphQL Scrapping Playground", "/scrapping/v1/graph/scrapping/query"))
+	r.Handle("/api/v1/scrapping/graph/playground", playground.AltairHandler("GraphQL Scrapping Playground", "/api/v1/scrapping/graph/query"))
 
 	r.Handle("/metrics", promhttp.Handler())
 
