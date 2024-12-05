@@ -2,6 +2,6 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: 'go-app'
+  - job_name: 'scrapping-app'
     static_configs:
-      - targets: ['go_app:9003']
+      - targets: ['scrapping:9003']

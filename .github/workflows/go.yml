@@ -4,9 +4,9 @@
 name: Go
 
 on:
-  push:
-    [ "master", "dev" ]
-  pull_request:
+  push: 
+    branches: [ "master", "dev" ]
+  pull_request: 
     branches: [ "master"]
 
 jobs:

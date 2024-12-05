@@ -18,7 +18,7 @@ RUN go mod download
 COPY . .
 
 # Собираем бинарный файл в корневой директории /build
-RUN go build -o main ./cmd/main.go
+RUN go build -ldflags "-s -w" -o main ./cmd/main.go
 
 # Stage 2: Create a lightweight image with the application binary
 FROM alpine:latest

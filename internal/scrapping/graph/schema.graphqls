@@ -1,0 +1,48 @@
+scalar Int64
+scalar Id
+
+type Query {
+    articles(page:Int!=1, pageSize:Int!=20): ArticlesPagination
+    article(id:Int!): ArticleInfo
+}
+
+type Mutation {
+    like(article:Int!): LikePayload
+    unlike(article:Int!): UnlikePayload
+}
+
+type ArticleInfo {
+    id: Int!
+    name: String!
+    text: String!
+    complexity: String!
+    readingTime: String!
+    tags: [String!]!
+    likes: Int!
+    likedByUser: Boolean!
+}
+
+type ArticlesPagination {
+    items: [ArticleInfo!]!
+    pageInfo: PaginationInfo!
+}
+
+type PaginationInfo {
+    page: Int!
+    pageSize: Int!
+    hasNextPage: Boolean!
+    hasPreviousPage: Boolean!
+}
+
+type LikePayload {
+    status: Status!
+}
+
+type UnlikePayload {
+    status: Status!
+}
+
+enum Status {
+    SUCCESS
+    FAIL
+}

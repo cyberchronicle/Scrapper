@@ -6,17 +6,22 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/go-co-op/gocron"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rs/cors"
 	"net/http"
 	"scrapping_service/internal/database"
 	"scrapping_service/internal/kafka"
+	"scrapping_service/internal/scrapping/external"
+	"scrapping_service/internal/scrapping/graph"
+	"scrapping_service/internal/scrapping/graph/server"
 	"scrapping_service/internal/scrapping/migrations"
-	"scrapping_service/internal/scrapping/models"
 	"scrapping_service/internal/scrapping/repository"
 	"scrapping_service/pkg/middlewares"
 	"scrapping_service/pkg/utils"
@@ -39,6 +44,7 @@ var (
 type Conf struct {
 	Host      string `yaml:"host"`
 	ScrapCron int    `yaml:"scrapCron"`
+	CheckAuth bool   `yaml:"checkAuth"`
 }
 
 type Service struct {
@@ -79,6 +85,17 @@ func (s *Service) Configure(conf *Conf, confDb *database.Conf) {
 	s.setConf(conf)
 
 	s.Load.Do(func() {
+
+		s.converter.Before(func(item *goquery.Selection) {
+			item.Find("img").Each(func(i int, item *goquery.Selection) {
+				src, ok := item.Attr("src")
+				if !ok {
+					return
+				}
+				item.SetAttr("src", item.AttrOr("data-src", src))
+			})
+		})
+
 		// подключаемся к БД
 		db := database.NewDatabase(s.ctx, "database", "scrapping")
 		db.Configure(confDb)
@@ -123,13 +140,22 @@ func (s *Service) getConf() *Conf {
 func (s *Service) start() {
 	defer log.Info().Str("module", s.Name).Msg("start worker closed")
 
+	graphConf := server.Config{Resolvers: &graph.Resolver{Scrapping: s}}
+
+	srv := handler.NewDefaultServer(server.NewExecutableSchema(graphConf))
+
 	r := chi.NewRouter()
 
-	r.Use(middlewares.Logger(s.Name))
+	// todo для локальных тестов с фронтендом, для прода убрать
+	r.Use(middlewares.Logger(s.Name), cors.AllowAll().Handler)
 
-	r.Get("/api/v1/scrapper/health", checkHealth)
+	r.Get("/api/v1/scrapping/health", checkHealth)
 
-	r.Get("/api/v1/scrapper/article/{id}", s.GetArticle)
+	r.Get("/api/v1/scrapping/article/{id}", s.GetArticle)
+
+	r.Handle("/api/v1/scrapping/graph/query", middlewares.Auth(srv, s.getConf().CheckAuth))
+
+	r.Handle("/api/v1/scrapping/graph/playground", playground.AltairHandler("GraphQL Scrapping Playground", "/api/v1/scrapping/graph/query"))
 
 	r.Handle("/metrics", promhttp.Handler())
 
@@ -137,6 +163,7 @@ func (s *Service) start() {
 
 		conf := s.getConf()
 		log.Info().Str("module", s.Name).Msgf("scrapper http server starting on %s", conf.Host)
+		log.Info().Str("module", s.Name).Msgf("scrapper graphql starting on  http://localhost%s/scrapping/v1/graph/scrapping/playground", conf.Host)
 
 		select {
 		case <-s.ctx.Done():
@@ -163,6 +190,7 @@ func (s *Service) start() {
 
 func (s *Service) scrap() {
 	log.Info().Str("module", s.Name).Msg("scrap start")
+	defer log.Info().Str("module", s.Name).Msg("scrap end")
 	lastArticleSite, err := getLastArticle()
 	if err != nil {
 		log.Error().Str("module", s.Name).Msgf("GetLastArticle from site error: %v", err)
@@ -194,7 +222,7 @@ func (s *Service) scrap() {
 	}
 	ids := utils.CreateRangeSlice([2]int64{firstArticle - 50, firstArticle - 1}, [2]int64{lastArticle + 1, lastArticleSite})
 	var wg sync.WaitGroup
-	result := make(chan *models.Article)
+	result := make(chan *external.Article)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -211,7 +239,7 @@ func (s *Service) scrap() {
 				defer wg.Done()
 				article, err := s.getArticle(i)
 				if err != nil {
-					log.Error().Str("module", s.Name).Msgf("getArticle error: %v, url: %v", err, i)
+					log.Info().Str("module", s.Name).Msgf("getArticle error: %v, url: %v", err, i)
 					return
 				}
 				result <- article
@@ -238,7 +266,6 @@ func (s *Service) scrap() {
 		}
 		s.kafka.SendAsyncMessage(json.RawMessage(fmt.Sprintf(`{"id":%v}`, article.Id)))
 	}
-	log.Info().Str("module", s.Name).Msg("scrap end")
 }
 
 func getLastArticle() (int64, error) {
@@ -279,7 +306,7 @@ func getLastArticle() (int64, error) {
 	return articleID, nil
 }
 
-func (s *Service) getArticle(id int64) (*models.Article, error) {
+func (s *Service) getArticle(id int64) (*external.Article, error) {
 	url := fmt.Sprintf("https://habr.com/ru/articles/%v/", id)
 	get, err := s.client.Get(url)
 	if err != nil {
@@ -322,7 +349,7 @@ func (s *Service) getArticle(id int64) (*models.Article, error) {
 		}
 	})
 
-	return &models.Article{
+	return &external.Article{
 		Id:          id,
 		Name:        name,
 		Text:        text,
@@ -332,7 +359,7 @@ func (s *Service) getArticle(id int64) (*models.Article, error) {
 	}, nil
 }
 
-func mapArticle(article *models.Article) (*repository.Article, error) {
+func mapArticle(article *external.Article) (*repository.Article, error) {
 	tags, err := json.Marshal(article.Tags)
 	if err != nil {
 		return nil, err
@@ -379,7 +406,7 @@ func (s *Service) GetArticle(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(err.Error()))
 		return
 	}
-	article := models.Article{
+	article := external.Article{
 		Id:          dbArticle.Id,
 		Name:        dbArticle.Name,
 		Text:        dbArticle.Text,
