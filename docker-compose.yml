@@ -12,6 +12,18 @@ services:
       POSTGRES_PASSWORD: articles
     volumes:
       - ./docker_init.sql:/docker-entrypoint-initdb.d/docker_init.sql
+      - pgdata:/var/lib/postgresql/data
+
+  pgAdmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@pgadmin.com
+      PGADMIN_DEFAULT_PASSWORD: password
+      PGADMIN_LISTEN_PORT: 80
+    ports:
+      - 15432:80
+    depends_on:
+      - pgdb
 
   zookeeper:
     image: zookeeper:latest
@@ -40,8 +52,15 @@ services:
       KAFKA_CREATE_TOPICS: "scrapping:1:1"
 
   scrapping:
-    image: drc0de/scrapping:1.0.0
+#    profiles:
+#      - donotstart
+#    image: drc0de/scrapping:1.0.0
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: scrapping
+    environment:
+      - TZ = 'Europe/Moscow'
     depends_on:
       kafka:
         condition: service_healthy
@@ -71,3 +90,6 @@ services:
 networks:
   default:
     driver: bridge
+
+volumes:
+  pgdata:
