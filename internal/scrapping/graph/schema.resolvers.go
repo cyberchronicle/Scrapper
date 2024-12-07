@@ -11,13 +11,10 @@ import (
 	"scrapping_service/internal/scrapping/graph/server"
 	"scrapping_service/pkg/middlewares"
 	"strconv"
-
-	"github.com/99designs/gqlgen/graphql"
 )
 
 // Like is the resolver for the like field.
 func (r *mutationResolver) Like(ctx context.Context, article int) (*models.LikePayload, error) {
-	graphql.AddError(ctx, nil)
 	userId, err := middlewares.GetUserId(ctx)
 	if err != nil {
 		return nil, err
