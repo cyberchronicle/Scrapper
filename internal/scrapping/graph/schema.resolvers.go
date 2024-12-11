@@ -11,13 +11,10 @@ import (
 	"scrapping_service/internal/scrapping/graph/server"
 	"scrapping_service/pkg/middlewares"
 	"strconv"
-
-	"github.com/99designs/gqlgen/graphql"
 )
 
 // Like is the resolver for the like field.
 func (r *mutationResolver) Like(ctx context.Context, article int) (*models.LikePayload, error) {
-	graphql.AddError(ctx, nil)
 	userId, err := middlewares.GetUserId(ctx)
 	if err != nil {
 		return nil, err
@@ -97,6 +94,58 @@ func (r *queryResolver) Article(ctx context.Context, id int) (*models.ArticleInf
 		Likes:       articleInfo.Likes,
 		LikedByUser: articleInfo.LikedByUser,
 	}, nil
+}
+
+// ArticlesByIds is the resolver for the articlesByIds field.
+func (r *queryResolver) ArticlesByIds(ctx context.Context, ids []int) ([]*models.ArticleInfo, error) {
+	userId, err := middlewares.GetUserId(ctx)
+	if err != nil {
+		return nil, err
+	}
+	articles, err := r.Scrapping.GetArticlesByIds(ctx, userId, ids)
+	if err != nil {
+		return nil, err
+	}
+	articlesInfo := make([]*models.ArticleInfo, 0, len(articles))
+	for _, article := range articles {
+		articlesInfo = append(articlesInfo, &models.ArticleInfo{
+			ID:          article.ID,
+			Name:        article.Name,
+			Text:        article.Text,
+			Complexity:  article.Complexity,
+			ReadingTime: strconv.Itoa(article.ReadingTime),
+			Tags:        article.Tags,
+			Likes:       article.Likes,
+			LikedByUser: article.LikedByUser,
+		})
+	}
+	return articlesInfo, nil
+}
+
+// Search is the resolver for the search field.
+func (r *queryResolver) Search(ctx context.Context, query string, pageSize int) ([]*models.ArticleInfo, error) {
+	userId, err := middlewares.GetUserId(ctx)
+	if err != nil {
+		return nil, err
+	}
+	articles, err := r.Scrapping.Search(ctx, userId, query, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	articlesInfo := make([]*models.ArticleInfo, 0, len(articles))
+	for _, article := range articles {
+		articlesInfo = append(articlesInfo, &models.ArticleInfo{
+			ID:          article.ID,
+			Name:        article.Name,
+			Text:        article.Text,
+			Complexity:  article.Complexity,
+			ReadingTime: strconv.Itoa(article.ReadingTime),
+			Tags:        article.Tags,
+			Likes:       article.Likes,
+			LikedByUser: article.LikedByUser,
+		})
+	}
+	return articlesInfo, nil
 }
 
 // Mutation returns server.MutationResolver implementation.

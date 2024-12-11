@@ -4,6 +4,8 @@ scalar Id
 type Query {
     articles(page:Int!=1, pageSize:Int!=20): ArticlesPagination
     article(id:Int!): ArticleInfo
+    articlesByIds(ids:[Int!]!): [ArticleInfo]
+    search(query: String!, pageSize:Int!=20): [ArticleInfo]
 }
 
 type Mutation {
