@@ -224,7 +224,7 @@ func (r *Repository) GetArticlesByIds(ctx context.Context, userId int, ids []int
 
 	var articles []*ArticleInfo
 
-	err := r.db.GetContext(ctx, &articles, query, userId, pq.Array(ids))
+	err := r.db.SelectContext(ctx, &articles, query, userId, pq.Array(ids))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errNotFound
@@ -233,4 +233,48 @@ func (r *Repository) GetArticlesByIds(ctx context.Context, userId int, ids []int
 	}
 
 	return articles, nil
+}
+
+func (r *Repository) Search(ctx context.Context, userId int, search string, pageSize int) ([]*ArticleInfo, error) {
+	query := `WITH 
+    	liked_articles AS (SELECT article_id
+							FROM scrapping.likes
+							WHERE user_id = $1),
+		article_likes AS (SELECT article_id, COUNT(*) AS like_count
+						   FROM scrapping.likes
+						   GROUP BY article_id),
+		ids as (SELECT id
+				 FROM scrapping.articles
+						  LEFT JOIN scrapping.article_vectors
+									ON scrapping.articles.id = scrapping.article_vectors.article_id
+				 WHERE text_tsvector @@ plainto_tsquery($2)
+				 limit 20)
+	SELECT a.id,
+		   a.name,
+		   a.text,
+		   a.complexity,
+		   a.reading_time,
+		   a.tags,
+		   COALESCE(al.like_count, 0)                                   AS like_count,
+		   CASE WHEN la.article_id IS NOT NULL THEN true ELSE false END AS liked_by_user
+	FROM scrapping.articles a
+			 LEFT JOIN article_likes al ON a.id = al.article_id
+			 LEFT JOIN liked_articles la ON a.id = la.article_id
+			 LEFT JOIN scrapping.article_vectors av ON a.id = av.article_id
+	WHERE id = ANY (SELECT id from ids)
+	ORDER BY ts_rank(av.text_tsvector, plainto_tsquery($2)) DESC
+	LIMIT $3`
+
+	articles := make([]*ArticleInfo, 0)
+
+	err := r.db.SelectContext(ctx, &articles, query, userId, search, pageSize)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return articles, nil
+
 }

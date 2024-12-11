@@ -180,7 +180,7 @@ func (s *Service) start() {
 		if err := s.server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			log.Error().Str("module", s.Name).Msgf("scrapper server http error %v", err)
 		} else {
-			log.Error().Str("module", s.Name).Msgf("scrapper server http shudown %v", err)
+			log.Info().Str("module", s.Name).Msgf("scrapper server http shudown %v", err)
 			return
 		}
 

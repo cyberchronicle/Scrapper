@@ -145,3 +145,32 @@ func (s *Service) GetArticlesByIds(ctx context.Context, userId int, ids []int) (
 
 	return articlesInfo, nil
 }
+
+func (s *Service) Search(ctx context.Context, userId int, query string, pageSize int) ([]*external.ArticleInfo, error) {
+	repoArticles, err := s.repo.Search(ctx, userId, query, pageSize)
+	if err != nil {
+		return nil, fmt.Errorf("error in repo: %v", err)
+	}
+
+	articlesInfo := make([]*external.ArticleInfo, 0, len(repoArticles))
+	for _, article := range repoArticles {
+		var tags []string
+		err = json.Unmarshal(article.Tags, &tags)
+		if err != nil {
+			return nil, fmt.Errorf("error unmarshall tags: %v", err)
+		}
+		articlesInfo = append(articlesInfo, &external.ArticleInfo{
+			ID:          article.ID,
+			Name:        article.Name,
+			Text:        article.Text,
+			Complexity:  article.Complexity.String,
+			ReadingTime: article.ReadingTime,
+			Tags:        tags,
+			Likes:       article.LikeCount,
+			LikedByUser: article.LikedByUser,
+		})
+	}
+
+	return articlesInfo, nil
+
+}
